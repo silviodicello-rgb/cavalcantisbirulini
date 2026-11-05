@@ -9,8 +9,9 @@ const MAX_PROMPT = 12000;
 const PREFIX = "Sei un insegnante di lettere gentile e preciso.";
 
 module.exports = async (req, res) => {
-  const origin = req.headers.origin || "";
-  if (origin && !ALLOWED_ORIGINS.includes(origin)) return res.status(403).end();
+ const origin = req.headers.origin || "";
+const sameSite = origin === "https://" + req.headers.host;
+if (origin && !sameSite && !ALLOWED_ORIGINS.includes(origin)) return res.status(403).end();
   if (origin) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
