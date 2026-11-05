@@ -34,8 +34,14 @@ if (origin && !sameSite && !ALLOWED_ORIGINS.includes(origin)) return res.status(
     },
     body: JSON.stringify({ model: MODEL, max_tokens: 400, messages: [{ role: "user", content: prompt }] }),
   });
-  if (r.status === 429) return res.status(429).end();
-  if (!r.ok) return res.status(502).end();
+  if (r.status === 429) { console.error("Anthropic 429", await r.text()); return res.status(429).end(); }
+  if (!r.ok) { console.error("Anthropic", r.status, await r.text()); return res.status(502).end(); }
+
+  const data = await r.json();
+  const text = (data.content || []).map(b => b.text || "").join("");
+  const a = text.indexOf("{"), b = text.lastIndexOf("}");
+  try { return res.status(200).json(JSON.parse(text.slice(a, b + 1))); }
+  catch { console.error("JSON non valido:", text); return res.status(502).end(); }
 
   const data = await r.json();
   const text = (data.content || []).map(b => b.text || "").join("");
