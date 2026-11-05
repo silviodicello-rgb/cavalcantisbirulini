@@ -2,16 +2,16 @@
 // La chiave sta nelle variabili d'ambiente di Vercel (ANTHROPIC_API_KEY), mai nella pagina.
 
 const ALLOWED_ORIGINS = [
-  "https://cavalcanti-plqltpipu-sbirulino.vercel.app/",  // <-- cambia con il tuo dominio Vercel (e aggiungi il dominio GitHub Pages, se lo usi)
+  // Serve solo se usi la pagina su un altro sito (senza "/" finale). Per la pagina su Vercel non serve.
 ];
 const MODEL = "claude-haiku-5-5";
 const MAX_PROMPT = 12000;
 const PREFIX = "Sei un insegnante di lettere gentile e preciso.";
 
 module.exports = async (req, res) => {
- const origin = req.headers.origin || "";
-const sameSite = origin === "https://" + req.headers.host;
-if (origin && !sameSite && !ALLOWED_ORIGINS.includes(origin)) return res.status(403).end();
+  const origin = req.headers.origin || "";
+  const sameSite = origin === "https://" + req.headers.host;
+  if (origin && !sameSite && !ALLOWED_ORIGINS.includes(origin)) return res.status(403).end();
   if (origin) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -25,27 +25,35 @@ if (origin && !sameSite && !ALLOWED_ORIGINS.includes(origin)) return res.status(
   if (typeof prompt !== "string" || prompt.length > MAX_PROMPT || !prompt.startsWith(PREFIX))
     return res.status(400).end();
 
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({ model: MODEL, max_tokens: 400, messages: [{ role: "user", content: prompt }] }),
-  });
-   if (r.status === 429) return res.status(429).json({ debug: await r.text() });
-  if (!r.ok) return res.status(502).json({ debug: "Anthropic " + r.status + " " + (await r.text()) });
+  let r;
+  try {
+    r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY || "",
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({ model: MODEL, max_tokens: 800, messages: [{ role: "user", content: prompt }] }),
+    });
+  } catch (e) {
+    console.error("Rete:", String(e));
+    return res.status(502).json({ debug: "Rete: " + String(e) });
+  }
+
+  if (!r.ok) {
+    const body = await r.text();
+    console.error("Anthropic", r.status, body);
+    return res.status(r.status === 429 ? 429 : 502).json({ debug: "Anthropic " + r.status + " " + body });
+  }
 
   const data = await r.json();
-  const text = (data.content || []).map(b => b.text || "").join("");
-  const a = text.indexOf("{"), b = text.lastIndexOf("}");
-  try { return res.status(200).json(JSON.parse(text.slice(a, b + 1))); }
-  catch { console.error("JSON non valido:", text); return res.status(502).end(); }
-
-  const data = await r.json();
-  const text = (data.content || []).map(b => b.text || "").join("");
-  const a = text.indexOf("{"), b = text.lastIndexOf("}");
-  try { return res.status(200).json(JSON.parse(text.slice(a, b + 1))); }
-  catch { return res.status(502).end(); }
+  const text = (data.content || []).map((b) => b.text || "").join("");
+  const a = text.indexOf("{"), z = text.lastIndexOf("}");
+  try {
+    return res.status(200).json(JSON.parse(text.slice(a, z + 1)));
+  } catch (e) {
+    console.error("JSON non valido:", text);
+    return res.status(502).json({ debug: "JSON non valido: " + text });
+  }
 };
